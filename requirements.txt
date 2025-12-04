@@ -2,3 +2,5 @@ ultralytics
 pillow
 fastapi
 uvicorn
+python-multipart
+pymongo
