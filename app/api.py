@@ -4,6 +4,8 @@ import shutil
 from app.services.yolo_service import YoloService
 from app.services.llm_service import LlmService
 from app.services.db_service import DatabaseService
+from app.services.firebase_service import FirebaseService
+
 
 app = FastAPI()
 
@@ -11,6 +13,8 @@ app = FastAPI()
 yolo_service = YoloService()
 llm_service = LlmService()
 db_service = DatabaseService()
+firebase_service = FirebaseService()
+
 
 @app.get("/")
 def home():
@@ -36,6 +40,8 @@ async def describe_image(file: UploadFile = File(...)):
 
     # save record in mongo
     db_service.save_record(results, description)
+    firebase_service.save_record(results, description)
+
 
     return {
         "objects": results,
@@ -46,3 +52,17 @@ async def describe_image(file: UploadFile = File(...)):
 def get_history():
     records = db_service.get_all_records()
     return {"history": records}
+
+@app.get("/firebase/history")
+def firebase_history():
+    return firebase_service.get_all()
+
+@app.delete("/firebase/delete/{doc_id}")
+def delete_item(doc_id: str):
+    firebase_service.delete_record(doc_id)
+    return {"message": "Deleted"}
+
+@app.put("/firebase/update/{doc_id}")
+def update_item(doc_id: str, data: dict):
+    firebase_service.update_record(doc_id, data)
+    return {"message": "Updated"}

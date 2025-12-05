@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+temp_image.jpg
+*.json
+!package.json
+*.json
+!example.json  # (optional, so you can keep sample configs)
+# Firebase keys
+firebase_key.json
+firebase-key.json
+*.json
