@@ -6,7 +6,8 @@ class FirebaseService:
     def __init__(self):
         # Load Firebase credentials
         cred = credentials.Certificate("firebase_key.json")
-        firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
         self.db = firestore.client()
         self.collection = self.db.collection("detections")
