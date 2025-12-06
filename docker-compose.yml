@@ -8,6 +8,10 @@ services:
       - "8000:8000"
     depends_on:
       - mongodb
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=detection_queue
 
   mongodb:
     image: mongo:latest
@@ -16,6 +20,24 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  postprocessor_service:
+    build: .
+    container_name: postprocessor_service
+    depends_on:
+      - rabbitmq
+      - mongodb
+    command: ["python", "postprocessor_service.py"]
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=detection_queue
 
 volumes:
   mongo-data:

@@ -5,6 +5,7 @@ from app.services.yolo_service import YoloService
 from app.services.llm_service import LlmService
 from app.services.db_service import DatabaseService
 from app.services.firebase_service import FirebaseService
+from app.services.rabbitmq_service import publish_detection_to_rabbitmq
 
 
 app = FastAPI()
@@ -43,9 +44,18 @@ async def describe_image(file: UploadFile = File(...)):
     firebase_service.save_record(results, description)
 
 
-    return {
+    detection_message = {
         "objects": results,
         "description": description
+    }
+
+    # send the message to RabbitMQ
+    publish_detection_to_rabbitmq(detection_message)
+
+    return {
+        "objects": results,
+        "description": description,
+        "message": "Sent to RabbitMQ for post-processing"
     }
 
 @app.get("/history")
