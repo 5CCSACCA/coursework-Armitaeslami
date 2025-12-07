@@ -12,9 +12,11 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_QUEUE=detection_queue
+    volumes:
+      - ./firebase_key.json:/app/firebase_key.json:ro
 
   mongodb:
-    image: mongo:latest
+    image: mongo
     container_name: mongodb
     ports:
       - "27017:27017"
