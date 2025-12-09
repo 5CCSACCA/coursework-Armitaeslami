@@ -79,3 +79,4 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 get_token.py
+Makefile
