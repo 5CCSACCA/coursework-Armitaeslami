@@ -1,4 +1,3 @@
-
 services:
   api-gateway:
     build:
@@ -11,7 +10,7 @@ services:
       mongodb:
         condition: service_started
       rabbitmq:
-        condition: service_healthy
+        condition: service_started
       yolo-service:
         condition: service_started
       llm-service:
@@ -29,11 +28,6 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 1G
 
   yolo-service:
     build:
@@ -47,12 +41,6 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 4G
-
 
   llm-service:
     build:
@@ -67,11 +55,6 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 8G
 
   mongodb:
     image: mongo:6.0
@@ -83,11 +66,6 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 1G
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -103,17 +81,6 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 90s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 512M
 
   postprocessor-service:
     build:
@@ -122,7 +89,7 @@ services:
     container_name: postprocessor-service
     depends_on:
       rabbitmq:
-        condition: service_healthy
+        condition: service_started
       mongodb:
         condition: service_started
     environment:
@@ -133,13 +100,7 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 512M
 
-  
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -155,7 +116,6 @@ services:
       - app-network
     restart: unless-stopped
 
-  
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
