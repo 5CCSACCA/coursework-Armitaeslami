@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.local
+
+# Documentation
+*.md
+!README.md
+
+# Tests (exclude from production images)
+tests/
+*_test.py
+test_*.py
+
+# Development files
+*.log
+*.tmp
+
+# OS
+.DS_Store
+
+# Firebase key (will be mounted as volume)
+firebase_key.json
+
+# Model files (downloaded at runtime)
+*.pt
+*.pth

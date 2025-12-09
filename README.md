@@ -1,6 +1,0 @@
-## Project Idea
-This system takes an input image, uses YOLO11n to detect objects
-in the image, counts how many of each object are found, and then
-generates a simple description such as:
-"There are 2 bananas and 1 pen in the picture."
-

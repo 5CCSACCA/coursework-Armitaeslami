@@ -1,0 +1,204 @@
+{
+  "info": "Example API requests for Cloud AI SaaS",
+  "base_url": "http://localhost:8000",
+  "auth_header": "Authorization: Bearer <your-firebase-id-token>",
+  
+  "examples": {
+    "1_health_check": {
+      "description": "Check if all services are running",
+      "method": "GET",
+      "endpoint": "/health",
+      "auth_required": false,
+      "curl": "curl http://localhost:8000/health",
+      "expected_response": {
+        "status": "healthy",
+        "services": {
+          "api_gateway": true,
+          "mongodb": true,
+          "firebase": true,
+          "rabbitmq": true,
+          "yolo_service": true,
+          "llm_service": true
+        }
+      }
+    },
+    
+    "2_detect_objects": {
+      "description": "Detect objects in an image using YOLO",
+      "method": "POST",
+      "endpoint": "/detect",
+      "auth_required": true,
+      "content_type": "multipart/form-data",
+      "curl": "curl -X POST http://localhost:8000/detect -H 'Authorization: Bearer $TOKEN' -F 'file=@image.jpg'",
+      "expected_response": {
+        "objects": {
+          "person": 2,
+          "dog": 1
+        },
+        "confidence_scores": {
+          "person": [0.95, 0.87],
+          "dog": [0.92]
+        },
+        "total_objects": 3
+      }
+    },
+    
+    "3_generate_text": {
+      "description": "Generate text using BitNet LLM",
+      "method": "POST",
+      "endpoint": "/generate",
+      "auth_required": true,
+      "content_type": "application/json",
+      "request_body": {
+        "prompt": "Describe a peaceful morning in the countryside",
+        "max_tokens": 100,
+        "temperature": 0.7
+      },
+      "curl": "curl -X POST http://localhost:8000/generate -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -d '{\"prompt\": \"Describe a peaceful morning\", \"max_tokens\": 100}'",
+      "expected_response": {
+        "prompt": "Describe a peaceful morning in the countryside",
+        "response": "The morning sun rises gently over the rolling hills...",
+        "tokens_generated": 45,
+        "model": "bitnet-compatible"
+      }
+    },
+    
+    "4_describe_image": {
+      "description": "Full pipeline: detect objects and generate description",
+      "method": "POST",
+      "endpoint": "/describe",
+      "auth_required": true,
+      "content_type": "multipart/form-data",
+      "curl": "curl -X POST http://localhost:8000/describe -H 'Authorization: Bearer $TOKEN' -F 'file=@image.jpg'",
+      "expected_response": {
+        "objects": {
+          "person": 2,
+          "dog": 1
+        },
+        "description": "The image contains 2 persons and 1 dog.",
+        "message": "Sent to RabbitMQ for post-processing"
+      },
+      "side_effects": [
+        "Record saved to MongoDB",
+        "Record saved to Firebase Firestore",
+        "Message published to RabbitMQ for async processing"
+      ]
+    },
+    
+    "5_get_history": {
+      "description": "Get detection history from MongoDB",
+      "method": "GET",
+      "endpoint": "/history",
+      "auth_required": true,
+      "query_params": {
+        "limit": 100,
+        "skip": 0
+      },
+      "curl": "curl http://localhost:8000/history -H 'Authorization: Bearer $TOKEN'",
+      "expected_response": {
+        "history": [
+          {
+            "objects": {"person": 2, "dog": 1},
+            "description": "The image contains 2 persons and 1 dog.",
+            "time": "2024-01-15 10:30:00",
+            "user_id": "firebase-user-uid"
+          }
+        ],
+        "count": 1
+      }
+    },
+    
+    "6_firebase_history": {
+      "description": "Get records from Firebase Firestore",
+      "method": "GET",
+      "endpoint": "/firebase/history",
+      "auth_required": true,
+      "curl": "curl http://localhost:8000/firebase/history -H 'Authorization: Bearer $TOKEN'",
+      "expected_response": {
+        "records": [
+          {
+            "id": "abc123",
+            "objects": {"person": 2},
+            "description": "The image contains 2 persons.",
+            "time": "2024-01-15T10:30:00.000Z"
+          }
+        ],
+        "count": 1
+      }
+    },
+    
+    "7_update_firebase_record": {
+      "description": "Update a record in Firebase",
+      "method": "PUT",
+      "endpoint": "/firebase/update/{doc_id}",
+      "auth_required": true,
+      "content_type": "application/json",
+      "request_body": {
+        "description": "Updated description text",
+        "metadata": {
+          "edited": true,
+          "edit_reason": "Corrected description"
+        }
+      },
+      "curl": "curl -X PUT http://localhost:8000/firebase/update/abc123 -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -d '{\"description\": \"Updated\"}'",
+      "expected_response": {
+        "message": "Updated successfully",
+        "doc_id": "abc123"
+      }
+    },
+    
+    "8_delete_firebase_record": {
+      "description": "Delete a record from Firebase",
+      "method": "DELETE",
+      "endpoint": "/firebase/delete/{doc_id}",
+      "auth_required": true,
+      "curl": "curl -X DELETE http://localhost:8000/firebase/delete/abc123 -H 'Authorization: Bearer $TOKEN'",
+      "expected_response": {
+        "message": "Deleted successfully",
+        "doc_id": "abc123"
+      }
+    },
+    
+    "9_get_postprocessed": {
+      "description": "Get postprocessed results from RabbitMQ consumer",
+      "method": "GET",
+      "endpoint": "/postprocessed",
+      "auth_required": true,
+      "curl": "curl http://localhost:8000/postprocessed -H 'Authorization: Bearer $TOKEN'",
+      "expected_response": {
+        "records": [
+          {
+            "objects": {"person": 2},
+            "description": "The image contains 2 persons.",
+            "postprocessed": true,
+            "statistics": {
+              "total_objects": 2,
+              "unique_classes": 1,
+              "categories": {
+                "people": [{"name": "person", "count": 2}]
+              },
+              "average_confidence": 0.91
+            }
+          }
+        ],
+        "count": 1
+      }
+    }
+  },
+  
+  "test_workflow": [
+    "1. Start all services: docker-compose up -d",
+    "2. Get Firebase token: python scripts/get_firebase_token.py",
+    "3. Export token: export TOKEN='<your-token>'",
+    "4. Check health: curl http://localhost:8000/health",
+    "5. Upload image for detection: curl -X POST ... (see example 2)",
+    "6. Check history: curl http://localhost:8000/history -H 'Authorization: Bearer $TOKEN'",
+    "7. Check postprocessed: curl http://localhost:8000/postprocessed -H 'Authorization: Bearer $TOKEN'"
+  ],
+  
+  "mock_mode": {
+    "description": "When firebase_key.json is not present, the API runs in mock mode",
+    "mock_token": "test-token",
+    "example": "curl http://localhost:8000/history -H 'Authorization: Bearer test-token'"
+  }
+}

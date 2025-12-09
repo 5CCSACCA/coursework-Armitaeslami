@@ -1,0 +1,146 @@
+services:
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongodb:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      yolo-service:
+        condition: service_started
+      llm-service:
+        condition: service_started
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/
+      - MONGODB_DATABASE=mydatabase
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=detection_queue
+      - YOLO_SERVICE_URL=http://yolo-service:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
+      - RATE_LIMIT_PER_MINUTE=100
+    volumes:
+      - ./firebase_key.json:/app/firebase_key.json:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  yolo-service:
+    build:
+      context: ./yolo-service
+      dockerfile: Dockerfile
+    container_name: yolo-service
+    ports:
+      - "8001:8001"
+    environment:
+      - MODEL_PATH=yolo11n.pt
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  llm-service:
+    build:
+      context: ./llm-service
+      dockerfile: Dockerfile
+    container_name: llm-service
+    ports:
+      - "8002:8002"
+    environment:
+      - MODEL_NAME=bitnet
+      - MAX_TOKENS=256
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  postprocessor-service:
+    build:
+      context: ./postprocessor-service
+      dockerfile: Dockerfile
+    container_name: postprocessor-service
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      mongodb:
+        condition: service_started
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=detection_queue
+      - MONGODB_URI=mongodb://mongodb:27017/
+      - MONGODB_DATABASE=mydatabase
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  rabbitmq-data:
+  prometheus-data:
+  grafana-data:
