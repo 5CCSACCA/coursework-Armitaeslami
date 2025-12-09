@@ -1,215 +1,111 @@
-# Cloud Computing for AI - SaaS Application
+# Cloud Computing for Artificial Intelligence – armita
 
-A microservices-based SaaS application that provides image object detection (YOLO) and natural language processing (BitNet LLM) capabilities.
+This project implements a small cloud-based AI system made up of several services.  
+The system exposes a YOLO model for image analysis, an LLM service for text processing, and a post-processing service connected through RabbitMQ.  
+Everything runs together using Docker Compose.
 
-## System Overview
+---
 
-This system consists of:
-1. **YOLO Service**: Object detection using YOLOv11n from Ultralytics
-2. **LLM Service**: Text generation using Microsoft BitNet (1-bit LLM)
-3. **API Gateway**: Central entry point with authentication, database persistence, and Firebase integration
-4. **Postprocessor Service**: Asynchronous post-processing via RabbitMQ
-5. **Monitoring Stack**: Prometheus + Grafana for system observability
+## How to Run
 
-## Prerequisites
+### Build
+docker compose build
 
-- Docker and Docker Compose
-- 4 CPUs, 16GB RAM minimum
-- Firebase project with:
-  - Firestore enabled
-  - Authentication enabled
-  - Service account key (`firebase_key.json`)
+### Start
+docker compose up
 
-## Quick Start
-
-### 1. Clone and Setup
-
-```bash
-git clone <your-repo-url>
-cd <repo-name>
-```
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-### 3. Add Firebase Credentials
-
-Place your `firebase_key.json` in the project root directory.
-
-### 4. Build
-
-```bash
-docker-compose build
-```
-
-### 5. Run
-
-```bash
-docker-compose up -d
-```
-
-### 6. Run Tests
-
-```bash
+### Run tests
 ./scripts/test.sh
-```
+(or test.bat on Windows)
 
-## API Endpoints
+---
 
-### Authentication
-All endpoints (except `/` and `/health`) require a Firebase ID token in the Authorization header:
-```
-Authorization: Bearer <firebase_id_token>
-```
+## Stages Overview
 
-### Endpoints
+### Stage 1 – Initial Model Setup
+I created the YOLO service and wrote basic code to load the model and run inference on images.  
+The LLM service was also set up with a simple text endpoint.  
+This stage was mainly about getting both models working before exposing them.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Health check |
-| GET | `/health` | Detailed health status |
-| POST | `/detect` | YOLO object detection on uploaded image |
-| POST | `/generate` | Generate text using BitNet LLM |
-| POST | `/describe` | Detect objects and generate description |
-| GET | `/history` | Get all detection history from MongoDB |
-| GET | `/firebase/history` | Get all records from Firebase |
-| PUT | `/firebase/update/{doc_id}` | Update a Firebase record |
-| DELETE | `/firebase/delete/{doc_id}` | Delete a Firebase record |
+### Stage 2 – Containerisation
+Each service received its own Dockerfile.  
+I tested the images individually to make sure the models and FastAPI apps ran correctly inside containers.
 
-### Example Usage
+### Stage 3 – API Exposure
+I added FastAPI endpoints for YOLO and the LLM.  
+The API gateway was introduced to act as a single entry point, forwarding requests to each service.
 
-#### Object Detection
-```bash
-curl -X POST "http://localhost:8000/detect" \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@image.jpg"
-```
+### Stage 4 – Database and History
+A small database layer was added to the gateway.  
+Each request is recorded with its details, and a `/history` endpoint returns past interactions.
 
-**Expected Input**: JPEG/PNG image file
-**Expected Output**:
-```json
-{
-  "objects": {"person": 2, "dog": 1},
-  "confidence_scores": {"person": [0.95, 0.87], "dog": [0.92]}
-}
-```
+### Stage 5 – Firebase Storage
+Firebase storage was integrated to save outputs externally.  
+I added endpoints for retrieving, updating, and deleting stored results.  
+The firebase_key.json file is used locally, with configuration handled through environment variables.
 
-#### Text Generation
-```bash
-curl -X POST "http://localhost:8000/generate" \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Describe a sunset", "max_tokens": 100}'
-```
+### Stage 6 – Post-Processing + RabbitMQ
+A second service was created for processing outputs from YOLO.  
+The gateway sends messages to RabbitMQ, and the post-processing service receives them and performs its task.  
+Docker Compose runs all services together.
 
-**Expected Input**: JSON with `prompt` (string) and optional `max_tokens` (int)
-**Expected Output**:
-```json
-{
-  "prompt": "Describe a sunset",
-  "response": "The sunset painted the sky in shades of orange and purple..."
-}
-```
+### Stage 7 – Authentication
+Firebase authentication was added to secure the API.  
+Protected routes now require a valid Bearer token, and the user ID from the token is stored with database entries.
 
-#### Full Pipeline (Detect + Describe)
-```bash
-curl -X POST "http://localhost:8000/describe" \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@image.jpg"
-```
+### Stage 8 – Cost Estimation
+I calculated estimated infrastructure costs using the assumptions in the specification.  
+A short explanation is included in pricing.md.
 
-**Expected Output**:
-```json
-{
-  "objects": {"person": 2, "dog": 1},
-  "description": "The image contains 2 people and 1 dog.",
-  "message": "Sent to RabbitMQ for post-processing"
-}
-```
+### Stage 9 – Monitoring
+Prometheus and Grafana were added under the monitoring folder.  
+Prometheus collects metrics, and Grafana provides a dashboard for visualising them.
 
-## Architecture
+### Stage 10 – Testing
+Each service includes unit tests in its tests folder.  
+The test scripts run all tests together.
 
-```
-                    ┌─────────────────┐
-                    │   Client/User   │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   API Gateway   │
-                    │   (Port 8000)   │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-┌───────▼───────┐   ┌────────▼────────┐   ┌──────▼──────┐
-│ YOLO Service  │   │   LLM Service   │   │   MongoDB   │
-│  (Port 8001)  │   │   (Port 8002)   │   │ (Port 27017)│
-└───────────────┘   └─────────────────┘   └─────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │    RabbitMQ     │
-                    │   (Port 5672)   │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │  Postprocessor  │
-                    │    Service      │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │    Firebase     │
-                    │   (External)    │
-                    └─────────────────┘
-```
+### Stage 11 – Security
+Security improvements were added throughout the system:
+- token authentication is enforced,
+- database entries are tied to the authenticated user,
+- Firebase rules protect stored data,
+- sensitive keys are stored in environment variables.
 
-## Monitoring
+I tested the secured endpoints using curl to confirm correct behaviour.
 
-Access monitoring dashboards:
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (default: admin/admin)
+---
 
-## Development
+## Project Structure
 
-### GitFlow Branches
-- `main`: Production-ready code
-- `develop`: Integration branch
-- `feature/*`: New features
-- `release/*`: Release preparation
-- `hotfix/*`: Production fixes
+.
+├── api-gateway/           # Main public API
+├── yolo-service/          # YOLO inference service
+├── llm-service/           # LLM service
+├── postprocessor-service/ # RabbitMQ post-processing service
+├── monitoring/            # Prometheus + Grafana
+├── scripts/               # Build/run/test tools
+├── docker-compose.yml
+├── firebase_key.json
+├── pricing.md
+└── README.md
 
-### Running Individual Services
-```bash
-# YOLO Service only
-docker-compose up yolo-service
+---
 
-# LLM Service only
-docker-compose up llm-service
-```
+## Example Requests
 
-## Security Features
+### YOLO Prediction
+curl -X POST http://localhost:8000/predict/yolo \
+     -H "Authorization: Bearer <TOKEN>" \
+     -F "file=@image.jpg"
 
-1. **Authentication**: Firebase ID token verification
-2. **Rate Limiting**: 100 requests/minute per IP
-3. **Input Validation**: Pydantic models for all inputs
-4. **CORS**: Configurable allowed origins
-5. **Secrets Management**: Environment variables for sensitive data
+### View History
+curl http://localhost:8000/history \
+     -H "Authorization: Bearer <TOKEN>"
 
-## Resource Requirements
+---
 
-| Service | CPU | Memory |
-|---------|-----|--------|
-| YOLO Service | 1 | 4GB |
-| LLM Service | 2 | 8GB |
-| API Gateway | 0.5 | 1GB |
-| Postprocessor | 0.25 | 512MB |
-| MongoDB | 0.25 | 1GB |
-| RabbitMQ | 0.25 | 512MB |
-| **Total** | **4.25** | **15GB** |
-
-## License
-
-This project is for educational purposes as part of the 5CCSACCA Cloud Computing for AI module.
+## Notes
+- GitFlow was used for development.
+- The final working version is merged into the main branch.
+- The system is designed to run within the required hardware limits.
