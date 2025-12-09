@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway metrics
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+
+  # YOLO Service metrics
+  - job_name: 'yolo-service'
+    static_configs:
+      - targets: ['yolo-service:8001']
+    metrics_path: '/metrics'
+
+  # LLM Service metrics
+  - job_name: 'llm-service'
+    static_configs:
+      - targets: ['llm-service:8002']
+    metrics_path: '/metrics'
