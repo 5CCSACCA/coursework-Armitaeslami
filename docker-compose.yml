@@ -24,7 +24,7 @@ services:
       - LLM_SERVICE_URL=http://llm-service:8002
       - RATE_LIMIT_PER_MINUTE=100
     volumes:
-      - ./firebase_key.json:/app/firebase_key.json:ro
+      - ./api-gateway/app/firebase_key.json:/app/firebase_key.json
     networks:
       - app-network
     restart: unless-stopped

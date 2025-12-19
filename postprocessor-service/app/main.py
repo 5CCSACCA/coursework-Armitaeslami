@@ -11,6 +11,7 @@ import time
 import logging
 from datetime import datetime
 from typing import Dict, Any
+import requests
 
 import pika
 from pika.exceptions import AMQPConnectionError
@@ -22,6 +23,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+
+LLM_SERVICE_URL = os.getenv(
+    "LLM_SERVICE_URL",
+    "http://llm-service:8002/describe"
+)
+
 
 # Configuration from environment
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
@@ -84,6 +93,7 @@ class PostprocessorService:
         categories = self._categorize_objects(objects)
         
         # Add confidence summary if available
+        metadata = data.get("metadata", {})
         confidence_scores = data.get("confidence_scores", {})
         avg_confidence = self._calculate_avg_confidence(confidence_scores)
         
@@ -147,6 +157,49 @@ class PostprocessorService:
         
         return round(sum(all_scores) / len(all_scores), 4)
     
+    def generate_story(self, objects: Dict[str, int]) -> str:
+        """Generate a creative story using the LLM service"""
+        if not objects:
+            logger.warning("No objects to generate story from")
+            return ""
+        
+        items = ", ".join([f"{count} {name}" if count > 1 else name 
+                        for name, count in objects.items()])
+        
+        prompt = f"Write a short, imaginative and creative story (3-4 sentences) about: {items}. Make it engaging and fun!"
+        
+        try:
+            llm_url = "http://llm-service:8002/generate"
+            logger.info(f"Calling LLM at {llm_url} with prompt: {prompt[:50]}...")
+            
+            response = requests.post(
+                llm_url,
+                json={
+                    "prompt": prompt,
+                    "max_tokens": 150,
+                    "temperature": 0.9
+                },
+                timeout=60
+            )
+            
+            logger.info(f"LLM response status: {response.status_code}")
+            
+            response.raise_for_status()
+            
+            result = response.json()
+            story = result.get("response", "")  # KEY FIX: "response" not "text"
+            
+            if not story:
+                logger.warning(f"Empty story. Full response: {result}")
+            else:
+                logger.info(f"✓ Story generated: {len(story)} chars")
+            
+            return story
+            
+        except Exception as e:
+            logger.error(f"Story generation failed: {type(e).__name__}: {e}")
+            return ""
+    
     def save_postprocessed(self, data: Dict[str, Any]) -> str:
         """
         Save postprocessed data to MongoDB.
@@ -174,6 +227,13 @@ class PostprocessorService:
             
             # Postprocess the data
             enriched_data = self.postprocess_data(data)
+
+            # Generate story from detected objects
+            story = self.generate_story(enriched_data["objects"])
+            enriched_data["story"] = story
+
+            # Attach story to document
+            enriched_data["story_generated"] = bool(story)
             
             # Save to MongoDB
             doc_id = self.save_postprocessed(enriched_data)
