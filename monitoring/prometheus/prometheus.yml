@@ -17,6 +17,9 @@ scrape_configs:
 
   # API Gateway metrics
   - job_name: 'api-gateway'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
     static_configs:
       - targets: ['api-gateway:8000']
     metrics_path: '/metrics'

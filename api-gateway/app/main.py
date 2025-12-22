@@ -17,6 +17,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import httpx
+import requests
 
 from app.config import get_settings
 from app.auth import get_current_user, get_authenticated_user, AuthenticatedUser
@@ -212,10 +213,13 @@ async def metrics():
 async def detect_objects(
     request: Request,
     file: UploadFile = File(...),
-    user: AuthenticatedUser = Depends(get_authenticated_user)
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    db: DatabaseService = Depends(get_db_service),
+    rabbitmq: RabbitMQService = Depends(get_rabbitmq_service)
 ):
     """
     Detect objects in an uploaded image using YOLO.
+    Publishes to RabbitMQ for post-processing (story generation).
     
     Requires authentication via Firebase ID token.
     """
@@ -226,11 +230,37 @@ async def detect_objects(
         raise HTTPException(status_code=400, detail="File must be an image")
     
     with REQUEST_LATENCY.labels(endpoint="/detect").time():
+        # Step 1: YOLO detection
         image_data = await file.read()
         result = await call_yolo_service(image_data)
+        
+        # Extract detection data
+        objects = result.get("objects", {})
+        description = result.get("description", "")
+        confidence_scores = result.get("confidence_scores", {})
+        
+        # Step 2: Save to MongoDB
+        db.save_record(objects, description, user_id=user.uid)
+        
+        # Step 3: Publish to RabbitMQ for post-processing (story generation)
+        try:
+            rabbitmq.publish_detection(
+                objects=objects,
+                description=description,
+                user_id=user.uid,
+                metadata={"confidence_scores": confidence_scores}
+            )
+            logger.info(f"Published detection to RabbitMQ for user {user.uid}")
+        except Exception as e:
+            logger.error(f"Failed to publish to RabbitMQ: {e}")
+            # Don't fail the request if RabbitMQ is down
     
     REQUEST_COUNT.labels(endpoint="/detect", method="POST", status="success").inc()
-    return result
+    
+    return {
+        **result,
+        "message": "Detection complete. Processing story generation in background."
+    }
 
 
 @app.post("/generate")
@@ -238,7 +268,7 @@ async def detect_objects(
 async def generate_text(
     request: Request,
     body: GenerateRequest,
-    user: AuthenticatedUser = Depends(get_authenticated_user)
+    user: dict = Depends(get_current_user)
 ):
     """
     Generate text using BitNet LLM.
@@ -390,9 +420,6 @@ async def delete_firebase_record(
     
     return {"message": "Deleted successfully", "doc_id": doc_id}
 
-
-
-
 @app.get("/postprocessed")
 async def get_postprocessed(
     limit: int = 100,
@@ -401,6 +428,16 @@ async def get_postprocessed(
     db: DatabaseService = Depends(get_db_service)
 ):
     """Get postprocessed results from MongoDB"""
+    records = db.get_postprocessed_records(limit=limit, skip=skip)
+    return {"records": records, "count": len(records)}
+
+@app.get("/stories")
+def get_stories(
+    limit: int = 10,
+    skip: int = 0,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    db: DatabaseService = Depends(get_db_service),
+):
     records = db.get_postprocessed_records(limit=limit, skip=skip)
     return {"records": records, "count": len(records)}
 
