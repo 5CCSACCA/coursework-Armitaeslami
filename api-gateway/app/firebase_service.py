@@ -132,10 +132,7 @@ class FirebaseService:
             if user_id:
                 query = query.where("user_id", "==", user_id)
             
-            query = query.order_by(
-                "timestamp",
-                direction=firestore.Query.DESCENDING
-            ).limit(limit)
+            query = query.limit(limit)
             
             docs = query.stream()
             
@@ -143,9 +140,11 @@ class FirebaseService:
             for doc in docs:
                 data = doc.to_dict()
                 data["id"] = doc.id
-                # Convert timestamp to string if present
                 if "timestamp" in data and data["timestamp"]:
-                    data["timestamp"] = data["timestamp"].isoformat()
+                    try:
+                        data["timestamp"] = data["timestamp"].isoformat()
+                    except AttributeError:
+                        data["timestamp"] = data["timestamp"].strftime("%Y-%m-%dT%H:%M:%S.%fZ") if hasattr(data["timestamp"], 'strftime') else str(data["timestamp"])
                 results.append(data)
             
             return results
