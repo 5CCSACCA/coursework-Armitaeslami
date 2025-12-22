@@ -11,3 +11,4 @@ prometheus-client==0.19.0
 slowapi==0.1.9
 python-jose[cryptography]==3.3.0
 requests
+pytest==7.4.3
